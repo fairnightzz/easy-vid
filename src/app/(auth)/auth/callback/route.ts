@@ -8,10 +8,39 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient();
-    await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    console.log("code process is working", requestUrl);
+
+    if (!error && data.user) {
+      // Create or update user record in the users table
+      try {
+        const { error: upsertError } = await supabase
+          .from("users")
+          .upsert({
+            id: data.user.id,
+            user_id: data.user.id,
+            name:
+              data.user.user_metadata?.full_name ||
+              data.user.user_metadata?.name ||
+              data.user.email?.split("@")[0] ||
+              "",
+            email: data.user.email || "",
+            token_identifier: data.user.id,
+            created_at: new Date().toISOString(),
+          })
+          .eq("id", data.user.id);
+
+        if (upsertError) {
+          console.log("Error upserting user:", upsertError);
+        }
+      } catch (err) {
+        console.log("Error in user upsert:", err);
+      }
+    }
   }
 
   // URL to redirect to after sign in process completes
   const redirectTo = redirect_to || "/dashboard";
+  console.log(new URL(redirectTo, requestUrl.origin));
   return NextResponse.redirect(new URL(redirectTo, requestUrl.origin));
-} 
+}
